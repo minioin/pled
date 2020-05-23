@@ -15,4 +15,16 @@ pub enum Error {
 
     #[error("Given value can't be none")]
     NoneError,
+
+    #[error("DatabaseError")]
+    DatabaseError,
+}
+
+impl From<sled::TransactionError<Error>> for Error {
+    fn from(t: sled::TransactionError<Error>) -> Self {
+        match t {
+            sled::TransactionError::Abort(t) => t,
+            sled::TransactionError::Storage(t) => Error::Sled(t),
+        }
+    }
 }
