@@ -1,0 +1,22 @@
+[package]
+name = "pled"
+version = "0.1.0"
+authors = ["Minioin <minioin@protonmail.com>"]
+edition = "2018"
+license = "Apache 2 or MIT"
+description = "Typed sled"
+readme = "Readme.md"
+repository = "https://github.com/minioin/pled/"
+keywords = ["sled", "typed", "embedded", "database"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sled = "0.31.0"
+serde = { version = "1.0.110", features = ["derive"] }
+bincode = { version =  "1", optional = true }
+serde_cbor ={ version =  "0.11.1", optional = true }
+thiserror = "1.0.19"
+
+[features]
+default = ["bincode"]
