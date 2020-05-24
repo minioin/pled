@@ -5,19 +5,22 @@ use std::path::PathBuf;
 use serde::de::DeserializeOwned;
 pub use serde::*;
 use serde::{Deserialize, Serialize};
+use std::result;
 pub use sled::*;
 
 pub use error::Error;
 pub use error::Result;
+use std::str::FromStr;
+use serde::export::Formatter;
 
 pub mod error;
 pub mod serialize;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct Id(u64);
+pub struct Id(String);
 
 impl Deref for Id {
-    type Target = u64;
+    type Target = String;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -26,7 +29,32 @@ impl Deref for Id {
 
 impl From<u64> for Id {
     fn from(id: u64) -> Self {
-        Self(id)
+        Self(format!("{}", id))
+    }
+}
+
+impl std::fmt::Display for Id {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Into<String> for Id {
+    fn into(self) -> String {
+        self.0
+    }
+}
+
+impl From<String> for Id {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+
+impl From<&str> for Id {
+    fn from(s: &str) -> Self {
+        Self(s.into())
     }
 }
 
@@ -77,6 +105,8 @@ pub trait Store {
     fn remove_all<T: Document>(&self, data: &Vec<Id>) -> Result<()>;
     fn get_all<T: Document + DeserializeOwned>(&self, skip: usize, take: usize) -> Vec<T>;
 
+    fn get<T: Document + DeserializeOwned>(&self, ids: Vec<Id>) -> Result<Vec<T>>;
+
     fn add<T: Serialize + Document>(&self, data: &T) -> Result<Vec<Id>> {
         self.add_all(&vec![data])
     }
@@ -103,7 +133,7 @@ impl Store for SledStore {
                     };
                     let serialized: Vec<u8> = crate::serialize::serialize(&item)
                         .map_err(ConflictableTransactionError::Abort)?;
-                    tree.insert(&id.to_be_bytes(), serialized)?;
+                    tree.insert(id.as_str(), serialized)?;
                     ids.push(id);
                 }
                 Ok(ids)
@@ -122,7 +152,7 @@ impl Store for SledStore {
                         .map_err(ConflictableTransactionError::Storage)?;
                     let serialized: Vec<u8> = crate::serialize::serialize(&item)
                         .map_err(ConflictableTransactionError::Abort)?;
-                    tree.insert(&id.to_be_bytes(), serialized)?;
+                    tree.insert(id.as_str(), serialized)?;
                 }
                 Ok(())
             })?;
@@ -134,7 +164,7 @@ impl Store for SledStore {
             .open_tree(T::COLLECTION_NAME)?
             .transaction(|tree| {
                 for item in data {
-                    tree.remove(&item.to_be_bytes())?;
+                    tree.remove(item.as_str())?;
                 }
                 Ok(())
             })?;
@@ -152,5 +182,17 @@ impl Store for SledStore {
             .map(|item| item.unwrap())
             .map(|item| crate::serialize::deserialize(&item).unwrap())
             .collect()
+    }
+
+    fn get<T: Document + DeserializeOwned>(&self, ids: Vec<Id>) -> Result<Vec<T>> {
+        let mut items: Vec<T> = Vec::new();
+        let tree = self.sled.open_tree(T::COLLECTION_NAME)?;
+        for id in ids {
+            let item = tree.get(id.as_str());
+                let item = tree.get(id.as_str())?.ok_or(Error::NoneError)?;
+            let item  = crate::serialize::deserialize(&item)?;
+            items.push(item);
+        }
+        Ok(items)
     }
 }
